@@ -1,17 +1,19 @@
+// GRR20190485 Gustavo Henrique da Silva Barbosa
+
 #include"queue.h"
 #include"stdio.h"
 
-//------------------------------------------------------------------------------
-// Conta o numero de elementos na fila
-// Retorno: numero de elementos na fila
 int queue_size (queue_t *queue) {
+    // Se a fila não existe retorna tamanho 0
     if(queue == NULL){
         return 0;
     }
     
+    // Inicial é o primeiro elemento
+    // Vai iterando sobre atual, até ele ser igual ao inicial
+    // Retorna o tamanho
     queue_t *inicial = queue;
     queue_t *atual = queue->next;
-
     int tam = 1;
     while(atual != NULL && atual != inicial) {
         tam++;
@@ -22,37 +24,35 @@ int queue_size (queue_t *queue) {
     return tam;
 }
 
-//------------------------------------------------------------------------------
-// Percorre a fila e imprime na tela seu conteúdo. A impressão de cada
-// elemento é feita por uma função externa, definida pelo programa que
-// usa a biblioteca. Essa função deve ter o seguinte protótipo:
-//
-// void print_elem (void *ptr) ; // ptr aponta para o elemento a imprimir
+
 void queue_print (char *name, queue_t *queue, void print_elem (void*) ){
-    printf("%s", name);
-    
+    // Imprime a primeira parte
+    printf("%s [", name);    
     if(queue == NULL){
+        printf("]\n");
         return;
     }
 
+    // Itera sobre a fila imprimindo os elementos
     queue_t *inicial = NULL;
     queue_t *atual = queue;
     while(atual != NULL && atual != inicial) {
-        print_elem(atual);
+        // Se for o primeiro elemento inicia var inicial
+        // Caso constrário imprime o espaço entre os elementos
         if(inicial == NULL){
             inicial = atual;
+        } else {    
+           printf(" ");
         }
+        
+        print_elem(atual);
+        
         atual = atual->next;
     }
+    printf("]\n");
 }
 
-//------------------------------------------------------------------------------
-// Insere um elemento no final da fila.
-// Condicoes a verificar, gerando msgs de erro:
-// - a fila deve existir
-// - o elemento deve existir
-// - o elemento nao deve estar em outra fila
-// Retorno: 0 se sucesso, <0 se ocorreu algum erro
+
 int queue_append (queue_t **queue, queue_t *elem) {
     if(queue == NULL) {
         fprintf(stderr, "A fila ainda não existe !");
@@ -70,9 +70,10 @@ int queue_append (queue_t **queue, queue_t *elem) {
     }
 
     queue_t *primeiro = *queue;
-    // Fila vazia
+
+    // Se o primeiro elemento for NULL a fila está vazia
+    // Adiciona elemento e retorna
     if(primeiro == NULL){
-        printf("Adiciona primeiro %p\n", &elem);
         *queue = elem;
 
         elem->next = elem;
@@ -81,9 +82,11 @@ int queue_append (queue_t **queue, queue_t *elem) {
         return 0;
     }
 
+    // Recebe ultimo elemento da fila
     queue_t *ultimo = (*queue)->prev;
 
     // Reoganiza os ponteiros
+    // Novo elemento irá após o último
     primeiro->prev = elem;
     ultimo->next = elem;
     elem->prev = ultimo;
@@ -92,17 +95,8 @@ int queue_append (queue_t **queue, queue_t *elem) {
     return 0;
 }
 
-//------------------------------------------------------------------------------
-// Remove o elemento indicado da fila, sem o destruir.
-// Condicoes a verificar, gerando msgs de erro:
-// - a fila deve existir
-// - a fila nao deve estar vazia
-// - o elemento deve existir
-// - o elemento deve pertencer a fila indicada
-// Retorno: 0 se sucesso, <0 se ocorreu algum erro
 
 int queue_remove (queue_t **queue, queue_t *elem) {
-    printf("removendo...\n");
     if(queue == NULL) {
         fprintf(stderr, "A fila ainda não existe !");
         return -1;
@@ -118,6 +112,7 @@ int queue_remove (queue_t **queue, queue_t *elem) {
         return -1;
     }
 
+    // Itera sobre a fila até o final dela ou encontrar o elemento a ser removido
     queue_t *inicial = NULL;
     queue_t *atual = *queue;
     while(atual != NULL && atual != inicial && atual != elem) {
@@ -126,23 +121,33 @@ int queue_remove (queue_t **queue, queue_t *elem) {
         }
         atual = atual->next;
     }
-
+    // Verifica se chegou até o final da fila sem encontrar o elemento
     if(atual == inicial){
         fprintf(stderr, "O elemento a ser removido não existe nesta fila !\n");
         return -1;
     }
 
+    // Se existe apenas um elemento na fila e este deve ser removido
     if(atual->next == atual && atual->prev == atual){
+        // Faz fila apontar para NULL e organiza ponteiros do elemento removido
         *queue = NULL;
         atual->next = NULL;
         atual->prev = NULL;
 
         return 0;   
     }
-    *queue = atual->next;
+
+    // Se o elemento removido for o primeiro da fila
+    // a fila deve passar a apontar para o segundo
+    if(*queue == atual){
+        *queue = atual->next;
+    }
+
+    // Reorganizza os ponteiros da fila
     atual->prev->next = atual->next;
     atual->next->prev = atual->prev;
-
+    
+    // Remove elemento
     atual->next = NULL;
     atual->prev = NULL;
 
