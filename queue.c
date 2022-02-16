@@ -20,14 +20,15 @@ int queue_size (queue_t *queue) {
         atual = atual->next;
     }
 
-
     return tam;
 }
 
 
 void queue_print (char *name, queue_t *queue, void print_elem (void*) ){
     // Imprime a primeira parte
-    printf("%s [", name);    
+    printf("%s [", name);
+
+    // Se a fila não existe retorna
     if(queue == NULL){
         printf("]\n");
         return;
@@ -37,8 +38,8 @@ void queue_print (char *name, queue_t *queue, void print_elem (void*) ){
     queue_t *inicial = NULL;
     queue_t *atual = queue;
     while(atual != NULL && atual != inicial) {
-        // Se for o primeiro elemento inicia var inicial
-        // Caso constrário imprime o espaço entre os elementos
+        // Se for o primeiro elemento, inicia variavel inicial
+        // Caso contrario imprime o espaço entre os elementos
         if(inicial == NULL){
             inicial = atual;
         } else {    
