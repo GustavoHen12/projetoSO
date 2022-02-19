@@ -1,7 +1,7 @@
 // GRR20190485 Gustavo Henrique da Silva Barbosa
 
+#include<stdio.h>
 #include"queue.h"
-#include"stdio.h"
 
 int queue_size (queue_t *queue) {
     // Se a fila não existe retorna tamanho 0
