@@ -1,7 +1,32 @@
 // GRR20190485 Gustavo Henrique da Silva Barbosa
 
 #include<stdio.h>
+#include<stdlib.h>
 #include"ppos.h"
+
+task_t *MAIN_TASK;
+task_t *ACTUAL_TASK;
+int LAST_ID = 0;
+
+int new_task_id () {
+    int last = LAST_ID;
+    LAST_ID = LAST_ID + 1;
+    debug_print("new task id: %d\n", LAST_ID);
+    return last;
+}
+
+void setActualTask(task_t *task){
+    ACTUAL_TASK = task;
+}
+
+int task_init(task_t *task, ucontext_t *context) {
+    task->context = *context;
+    task->id = new_task_id();
+    task->status = READY;
+    task->preemptable = 0;
+
+    return 0;
+}
 
 /*
 * Esta função inicializa as estruturas internas do SO. Por enquanto, conterá apenas algumas 
@@ -10,8 +35,24 @@
 * funções de troca de contexto:
 */
 void ppos_init (){
-    /* desativa o buffer da saida padrao (stdout), usado pela função printf */
+    debug_print("Iniciando estruturas...\n");
+    // Desativa buffer printf
     setvbuf (stdout, 0, _IONBF, 0) ;
+
+    // Inicia task principal
+    MAIN_TASK = malloc(sizeof(task_t));
+    if(!MAIN_TASK){
+        perror ("Erro: não foi possível alocar task !") ;
+        return;
+    }
+
+    getcontext(&(MAIN_TASK->context));
+    MAIN_TASK->id = new_task_id();
+    MAIN_TASK->status = RUNNING;
+    MAIN_TASK->preemptable = 0;
+
+    setActualTask(MAIN_TASK);
+    debug_print("Finalizou estruturas\n");
 }
 
 /*
@@ -23,6 +64,33 @@ void ppos_init (){
 * principal (que exercerá a mesma função da variável ContextMain no programa contexts.c).
 */
 int task_create (task_t *task, void (*start_routine)(void *),  void *arg) {
+    debug_print("Criando tarefa...\n");
+    
+    // Cria contexto
+    ucontext_t context;
+    char *stack ;
+
+    getcontext (&context) ;
+
+    stack = malloc (STACKSIZE) ;
+    if (stack) {
+        context.uc_stack.ss_sp = stack ;
+        context.uc_stack.ss_size = STACKSIZE ;
+        context.uc_stack.ss_flags = 0 ;
+        context.uc_link = 0 ;
+    } else {
+        perror ("Erro na criação da pilha: ") ;
+        return -1;
+    }
+    makecontext (&context, (void*)(*start_routine), 1, arg) ;
+
+    // Cria tarefa
+    task->context = context;
+    task->id = new_task_id();
+    task->status = READY;
+    task->preemptable = 0;
+
+    debug_print("Tarefa %d criada\n", task->id);
     return 0;
 }
 
@@ -33,6 +101,16 @@ int task_create (task_t *task, void (*start_routine)(void *),  void *arg) {
 * Ela será chamada sempre que for necessária uma troca de contexto.
 */
 int task_switch (task_t *task) {
+    debug_print("Alterando tarefas...\n");
+    // Verificacoes
+    debug_print("Contexts: %p %p\n", &(ACTUAL_TASK->context), &(task->context));
+    task_t *atual = ACTUAL_TASK;
+    ACTUAL_TASK = task;
+    atual->status = SUSPENDED;
+    ACTUAL_TASK->status = RUNNING;
+     
+    swapcontext(&(atual->context), &(task->context));
+    debug_print("Tarefas alteradas\n");
     return 0;
 }
 
@@ -43,7 +121,7 @@ int task_switch (task_t *task) {
 * será implementada usando task_switch.
 */
 void task_exit (int exit_code) {
-
+    task_switch(MAIN_TASK);
 }
 
 /*
@@ -52,5 +130,7 @@ void task_exit (int exit_code) {
 * duas tarefas com o mesmo ID.
 */
 int task_id () {
-    return 0;
+    //verificacoes
+    return ACTUAL_TASK->id;
 }
+

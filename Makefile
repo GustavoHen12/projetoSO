@@ -5,6 +5,11 @@ COMPILER = -std=gnu99
 
 all: ppos_core_debug
 
+ppos_core:
+	for number in 1 2 3 ; do \
+		gcc -Wall -o teste_ppos_core_$$number ppos_core.c testeP2_$$number.c ; \
+	done 
+
 # P2
 ppos_core_debug: 
 	gcc -Wall -o teste_ppos_core -DDEBUG ppos_core.c testeP2_1.c
