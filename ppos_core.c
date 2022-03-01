@@ -8,6 +8,14 @@ task_t *MAIN_TASK;
 task_t *ACTUAL_TASK;
 int LAST_ID = 0;
 
+/* ============ P2 ============
+Todo: revisar e comentar
+*/
+/*
+* Description: Retorna um novo id para tarefa de forma sequencial
+* Args:
+* Return: novo ID para tarefa
+*/
 int new_task_id () {
     int last = LAST_ID;
     LAST_ID = LAST_ID + 1;
@@ -15,24 +23,42 @@ int new_task_id () {
     return last;
 }
 
-void setActualTask(task_t *task){
+/*
+* Description: Retorna um novo id para tarefa de forma sequencial
+* Args:
+* Return: novo ID para tarefa
+*/
+void set_actual_task(task_t *task){
     ACTUAL_TASK = task;
 }
 
-int task_init(task_t *task, ucontext_t *context) {
-    task->context = *context;
-    task->id = new_task_id();
-    task->status = READY;
-    task->preemptable = 0;
-
-    return 0;
+/*
+* Description: Inicia tarefa principal
+* Args:
+* Return:
+*/
+void init_main_task(){
+    // Aloca espaço para task principal
+    MAIN_TASK = malloc(sizeof(task_t));
+    if(!MAIN_TASK){
+        perror ("Erro: não foi possível alocar task !") ;
+        return;
+    }
+    // Inicia os valores da task principal 
+    getcontext(&(MAIN_TASK->context));
+    MAIN_TASK->id = new_task_id();
+    MAIN_TASK->status = RUNNING;
+    MAIN_TASK->preemptable = 0;
+    // Coloca task principal como atual
+    set_actual_task(MAIN_TASK);
 }
 
+/*Fim funcoes auxiliares*/
+
 /*
-* Esta função inicializa as estruturas internas do SO. Por enquanto, conterá apenas algumas 
-* inicializações de variáveis e a seguinte instrução, que desativa o buffer utilizado pela 
-* função printf, para evitar condições de disputa que podem ocorrer nesse buffer ao usar as 
-* funções de troca de contexto:
+* Description: Inicia as estruturas necessarias para o ping pong os
+* Args:
+* Return:
 */
 void ppos_init (){
     debug_print("Iniciando estruturas...\n");
@@ -40,28 +66,18 @@ void ppos_init (){
     setvbuf (stdout, 0, _IONBF, 0) ;
 
     // Inicia task principal
-    MAIN_TASK = malloc(sizeof(task_t));
-    if(!MAIN_TASK){
-        perror ("Erro: não foi possível alocar task !") ;
-        return;
-    }
+    init_main_task();
 
-    getcontext(&(MAIN_TASK->context));
-    MAIN_TASK->id = new_task_id();
-    MAIN_TASK->status = RUNNING;
-    MAIN_TASK->preemptable = 0;
-
-    setActualTask(MAIN_TASK);
     debug_print("Finalizou estruturas\n");
 }
 
 /*
-* task: estrutura que referencia a tarefa criada
-* start_routine: função que será executada pela tarefa
-* arg: parâmetro a passar para a tarefa que está sendo criada
-* retorno: o ID (>0) da tarefa criada ou um valor negativo, se houver erro
-* Atenção: deve ser previsto um descritor de tarefa que aponte para o programa 
-* principal (que exercerá a mesma função da variável ContextMain no programa contexts.c).
+* Description: Inicia os valores de uma nova tarefa
+* Args:
+*   task: ponteiro para nova tarefa a ser criada
+*   start_routine: funcao executada pela tarefa
+*   arg: argumentos de start_routine
+* Return: Em caso de erro retorna um valor negativo, caso contrário o ID da tarefa criada
 */
 int task_create (task_t *task, void (*start_routine)(void *),  void *arg) {
     debug_print("Criando tarefa...\n");
@@ -70,9 +86,11 @@ int task_create (task_t *task, void (*start_routine)(void *),  void *arg) {
     ucontext_t context;
     char *stack ;
 
+    // Pega contexto atual
     getcontext (&context) ;
-
+    // Aloca pilha
     stack = malloc (STACKSIZE) ;
+    // Se conseguiu alocar, inicia campos do contexo criado
     if (stack) {
         context.uc_stack.ss_sp = stack ;
         context.uc_stack.ss_size = STACKSIZE ;
@@ -82,55 +100,74 @@ int task_create (task_t *task, void (*start_routine)(void *),  void *arg) {
         perror ("Erro na criação da pilha: ") ;
         return -1;
     }
+    // Cria contexto com funcao e argumentos passados
     makecontext (&context, (void*)(*start_routine), 1, arg) ;
 
-    // Cria tarefa
+    // Preenche os campos da tarefa
     task->context = context;
     task->id = new_task_id();
     task->status = READY;
     task->preemptable = 0;
 
     debug_print("Tarefa %d criada\n", task->id);
-    return 0;
+    return task->id;
 }
 
 /*
-* task: tarefa que irá assumir o processador
-* retorno: valor negativo se houver erro, ou zero
-* Esta é a operação básica de troca de contexto, que encapsula a função swapcontext.
-* Ela será chamada sempre que for necessária uma troca de contexto.
+* Description: Sai da tarefa atual (principal) e inicia a tarefa task
+* Args:
+*   task: tarefa que ira se tornar a atual e assumir o processador
+* Return: 0 quando sucesso, -1 se houver erro
 */
 int task_switch (task_t *task) {
     debug_print("Alterando tarefas...\n");
-    // Verificacoes
+    // TODO: Verificacoes
     debug_print("Contexts: %p %p\n", &(ACTUAL_TASK->context), &(task->context));
-    task_t *atual = ACTUAL_TASK;
+    
+    // Armazena tarefa atual
+    task_t *old_task = ACTUAL_TASK;
+    // Faz a tarefa atual apontar para a nova tarefa
     ACTUAL_TASK = task;
-    atual->status = SUSPENDED;
-    ACTUAL_TASK->status = RUNNING;
-     
-    swapcontext(&(atual->context), &(task->context));
+    
+    // Coloca o status da tarefa atual como suspensa
+    // E a da atual tarefa como executando 
+    old_task->status = SUSPENDED;
+    task->status = RUNNING;
+    
+    // Troca contextos
+    swapcontext(&(old_task->context), &(task->context));
     debug_print("Tarefas alteradas\n");
     return 0;
 }
 
 /*
-* exit_code : código de término devolvido pela tarefa corrente
-* (ignorar este parâmetro por enquanto, pois ele somente será usado mais tarde).
-* Quando uma tarefa encerra, o controle deve retornar à tarefa main. Esta chamada 
-* será implementada usando task_switch.
+* Description: Sai da tarefa atual e inicia a tarefa principal
+* Args:
+*   exit_code:
+* Return:
 */
 void task_exit (int exit_code) {
     task_switch(MAIN_TASK);
 }
 
 /*
-* retorno: Identificador numérico (ID) da tarefa corrente, que deverá ser 0 para main, 
-* ou um valor positivo para as demais tarefas. Esse identificador é único: não devem existir
-* duas tarefas com o mesmo ID.
+* Description: Retorna id da tarefa atual
+* Args:
+* Return: id da tarefa atual ou -1 se houver erro
 */
 int task_id () {
-    //verificacoes
+    if(ACTUAL_TASK == NULL){
+        perror ("Tarefa atual não iniciada !") ;
+        return -1;
+    }
+
     return ACTUAL_TASK->id;
 }
 
+/* ============ P3 ============
+Todo: 
+*/
+
+void task_yield () {
+
+}
