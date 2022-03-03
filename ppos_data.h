@@ -25,9 +25,6 @@ typedef struct task_t
 
 #define STACKSIZE 64*1024	/* tamanho de pilha das threads */
 
-#define READY 1;
-#define RUNNING 2;
-#define SUSPENDED 3;
 
 #ifdef DEBUG
 #define debug_print(...) do{ printf( __VA_ARGS__ ); } while(0)

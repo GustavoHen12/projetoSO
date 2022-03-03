@@ -3,7 +3,13 @@ LDFLAGS = -lm
 DEBUG_FLAGS = -g
 COMPILER = -std=gnu99
 
-all: ppos_core_debug
+all: ppos_core
+
+ppos_core_p3_clean: queue.o
+	gcc -Wall -o ppos_core_p3 queue.o $(CFLAGS) $(LDFLAGS) ppos_core.c testeP3_1.c $(DEBUG_FLAGS)
+
+ppos_core_p3: queue.o
+	gcc -Wall -o ppos_core_p3 queue.o $(CFLAGS) $(LDFLAGS) -DDEBUG ppos_core.c testeP3_1.c $(DEBUG_FLAGS)
 
 ppos_core:
 	for number in 1 2 3 ; do \
@@ -11,8 +17,8 @@ ppos_core:
 	done 
 
 # P2
-ppos_core_debug: 
-	gcc -Wall -o teste_ppos_core -DDEBUG ppos_core.c testeP2_1.c
+ppos_core_debug: queue.o
+	gcc -Wall -o teste_ppos_core queue.o $(CFLAGS) $(LDFLAGS) -DDEBUG ppos_core.c testeP2_1.c $(DEBUG_FLAGS)
 
 # P1
 exemplo_context: contexts.c

@@ -3,14 +3,105 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include"ppos.h"
+#include"queue.h"
 
 task_t *MAIN_TASK;
 task_t *ACTUAL_TASK;
+
 int LAST_ID = 0;
 
-/* ============ P2 ============
-Todo: revisar e comentar
+short READY = 1;
+short RUNNING = 2;
+short SUSPENDED = 3;
+short FINISHED = 4;
+
+void print_task (void *ptr)
+{
+   task_t *elem = ptr ;
+
+   if (!elem)
+      return ;
+
+   printf ("%d", elem->id) ;
+}
+
+
+/* ============ P3 ============ */
+task_t *DISPATCHER_TASK;
+task_t *USER_TASKS;
+
+/*
+* Description: Função de gerenciamento, utilizada pela tarefa dispatcher
+* Args:
+* Return:
 */
+task_t *scheduler () {
+    if(!USER_TASKS){
+        return NULL;
+    }
+
+    task_t *next = USER_TASKS;
+    USER_TASKS = USER_TASKS->next;
+
+    return next;
+}
+
+void end_task (task_t *task){
+    queue_remove((queue_t **) &USER_TASKS, (queue_t *) task);
+    
+    //libera dados
+    free(task->context.uc_stack.ss_sp);
+    task->context.uc_stack.ss_size = 0;
+    task->context.uc_stack.ss_flags = 0;
+
+    task->id = -1;
+}
+
+void dispatcher () {
+    debug_print("Inicio dispatcher...\n");
+    //queue_print("Fila: ", (queue_t *) USER_TASKS,  print_task);
+
+   // encerra a tarefa dispatcher
+   while(queue_size((queue_t *) USER_TASKS) > 0){
+       // escolhe a próxima tarefa a executar
+       task_t *next_task = scheduler();
+
+       if (next_task != NULL) {
+           debug_print("Próxima tarefa: %d\n", next_task->id);
+           task_switch(next_task);
+            
+           short status = next_task->status;
+           if(status == FINISHED){
+               end_task(next_task);
+               // queue_print("Fila: ", (queue_t *) USER_TASKS,  print_task);
+           }
+       }
+   }
+
+   debug_print("Fim dispatcher...\n");
+   task_exit(0);
+}
+
+/*
+* Description: Função altera o contexto para o dispatcher
+* Args:
+* Return:
+*/
+void task_yield () {
+    // Coloca a tarefa atual como suspensa
+    ACTUAL_TASK->status = SUSPENDED;
+
+    // Coloca a tarefa do Dispather como corrente
+    DISPATCHER_TASK->status = RUNNING;
+
+    // Altera tasks
+    task_switch(DISPATCHER_TASK);
+}
+
+
+
+/* ============ FIM P3 ============ */
+
 /*
 * Description: Retorna um novo id para tarefa de forma sequencial
 * Args:
@@ -19,7 +110,7 @@ Todo: revisar e comentar
 int new_task_id () {
     int last = LAST_ID;
     LAST_ID = LAST_ID + 1;
-    debug_print("new task id: %d\n", LAST_ID);
+    debug_print("new task id: %d\n", last);
     return last;
 }
 
@@ -68,6 +159,15 @@ void ppos_init (){
     // Inicia task principal
     init_main_task();
 
+    // Cria dispatcher
+    DISPATCHER_TASK = malloc(sizeof(task_t));
+    if(!DISPATCHER_TASK){
+        perror ("Erro: não foi possível alocar task !") ;
+        return;
+    }
+    task_create (DISPATCHER_TASK, dispatcher, NULL) ;
+    
+    USER_TASKS = NULL;
     debug_print("Finalizou estruturas\n");
 }
 
@@ -108,6 +208,17 @@ int task_create (task_t *task, void (*start_routine)(void *),  void *arg) {
     task->id = new_task_id();
     task->status = READY;
     task->preemptable = 0;
+    task->next = NULL;
+    task->prev = NULL;
+
+
+    int result = queue_append((queue_t **)&USER_TASKS, (queue_t *) task);
+    if(result < 0){
+        return -1;
+    }
+
+    // debug_print("Tarefa adicionada a fila \n");
+    // queue_print("Fila: ", (queue_t *) USER_TASKS,  print_task);
 
     debug_print("Tarefa %d criada\n", task->id);
     return task->id;
@@ -129,9 +240,13 @@ int task_switch (task_t *task) {
     // Faz a tarefa atual apontar para a nova tarefa
     ACTUAL_TASK = task;
     
-    // Coloca o status da tarefa atual como suspensa
-    // E a da atual tarefa como executando 
-    old_task->status = SUSPENDED;
+    // Se a tarefa anterior possui status como executando
+    // coloca o status dela como suspensa
+    if(old_task->status == RUNNING) {
+        old_task->status = SUSPENDED;
+    }
+
+    // Altera status da atual tarefa para executando 
     task->status = RUNNING;
     
     // Troca contextos
@@ -147,7 +262,21 @@ int task_switch (task_t *task) {
 * Return:
 */
 void task_exit (int exit_code) {
-    task_switch(MAIN_TASK);
+    debug_print("Finalizando tarefa...\n");
+    
+    // Armazena tarefa atual
+    task_t *old_task = ACTUAL_TASK;
+    task_t *next_task = (ACTUAL_TASK == DISPATCHER_TASK) ? MAIN_TASK : DISPATCHER_TASK;
+
+    // Coloca status da tarefa a ser finalizada como encerrada
+    old_task->status = FINISHED;
+
+    // Altera status da proxima tarefa como rodando
+    next_task->status = RUNNING;
+    
+    // Troca contextos
+    task_switch(next_task);
+    debug_print("Tarefas finalizadas\n");
 }
 
 /*
@@ -162,12 +291,4 @@ int task_id () {
     }
 
     return ACTUAL_TASK->id;
-}
-
-/* ============ P3 ============
-Todo: 
-*/
-
-void task_yield () {
-
 }
