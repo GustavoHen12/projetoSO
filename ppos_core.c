@@ -5,15 +5,65 @@
 #include"ppos.h"
 #include"queue.h"
 
-task_t *MAIN_TASK;
-task_t *ACTUAL_TASK;
+/* ============ VARIAVEIS GLOBAIS ============ */
 
-int LAST_ID = 0;
+task_t *MAIN_TASK; // Tarefa principal
+task_t *ACTUAL_TASK; // Tarefa em execução no momento
+task_t *DISPATCHER_TASK; // Tarefa para o dispatcher
+task_t *USER_TASKS; // Fila de tarefas do usuário
 
+int LAST_ID = 0; // Varável para controle dos ids das tarefas
+
+// Status das tarefas
 short READY = 1;
 short RUNNING = 2;
 short SUSPENDED = 3;
 short FINISHED = 4;
+
+// Macro para print quando executado em modo debug
+#ifdef DEBUG
+#define debug_print(...) do{ printf( __VA_ARGS__ ); } while(0)
+#else
+#define debug_print(...) do{ } while (0)
+#endif
+
+/* ============ FUNCOES AUXILIARES ============ */
+
+/*
+* Description: Retorna um novo id para tarefa de forma sequencial
+* Args:
+* Return: novo ID para tarefa
+*/
+int new_task_id () {
+    int last = LAST_ID;
+    LAST_ID = LAST_ID + 1;
+    debug_print("new task id: %d\n", last);
+    return last;
+}
+
+/*
+* Description: Inicia tarefa principal
+* Args:
+* Return:
+*/
+void init_main_task(){
+    // Aloca espaço para task principal
+    MAIN_TASK = malloc(sizeof(task_t));
+    if(!MAIN_TASK){
+        fprintf(stderr,"Erro: não foi possível alocar task !") ;
+        return;
+    }
+    // Inicia os valores da task principal 
+    getcontext(&(MAIN_TASK->context));
+    MAIN_TASK->id = new_task_id();
+    MAIN_TASK->status = RUNNING;
+    MAIN_TASK->preemptable = 0;
+    // Coloca task principal como atual
+    ACTUAL_TASK = MAIN_TASK;
+}
+
+
+/* ============ TEMP ============ */
 
 void print_task (void *ptr)
 {
@@ -25,13 +75,27 @@ void print_task (void *ptr)
    printf ("%d", elem->id) ;
 }
 
+/*
+* Description: Finaliza uma tarefa que já foi executada
+* Args: 
+*   task: Tarefa a ser finalizada
+* Return:
+*/
+void end_task (task_t *task){
+    // Remove task da fila
+    queue_remove((queue_t **) &USER_TASKS, (queue_t *) task);
+    
+    // Libera dados da task
+    free(task->context.uc_stack.ss_sp);
+    task->context.uc_stack.ss_size = 0;
+    task->context.uc_stack.ss_flags = 0;
+    task->id = -1;
+}
 
-/* ============ P3 ============ */
-task_t *DISPATCHER_TASK;
-task_t *USER_TASKS;
+/* ============ FUNCOES ============ */
 
 /*
-* Description: Função de gerenciamento, utilizada pela tarefa dispatcher
+* Description: Função responsável por determinar qual a próxima tarefa que será executada
 * Args:
 * Return:
 */
@@ -46,34 +110,29 @@ task_t *scheduler () {
     return next;
 }
 
-void end_task (task_t *task){
-    queue_remove((queue_t **) &USER_TASKS, (queue_t *) task);
-    
-    //libera dados
-    free(task->context.uc_stack.ss_sp);
-    task->context.uc_stack.ss_size = 0;
-    task->context.uc_stack.ss_flags = 0;
-
-    task->id = -1;
-}
-
+/*
+* Description: Função executada na tarefa do dispatcher, escolhe as tarefas que serão executas
+*   após a execução retorna para main
+* Args:
+* Return:
+*/
 void dispatcher () {
     debug_print("Inicio dispatcher...\n");
-    //queue_print("Fila: ", (queue_t *) USER_TASKS,  print_task);
 
-   // encerra a tarefa dispatcher
+   // Enquanto houver tarefas a serem executadas
    while(queue_size((queue_t *) USER_TASKS) > 0){
-       // escolhe a próxima tarefa a executar
+       // Escolhe a próxima tarefa a executar
        task_t *next_task = scheduler();
 
+       // Se houver próxima tarefa
        if (next_task != NULL) {
+           // Coloca em execução
            debug_print("Próxima tarefa: %d\n", next_task->id);
            task_switch(next_task);
-            
-           short status = next_task->status;
-           if(status == FINISHED){
+
+           // Verifica status de saida
+           if(next_task->status == FINISHED){
                end_task(next_task);
-               // queue_print("Fila: ", (queue_t *) USER_TASKS,  print_task);
            }
        }
    }
@@ -98,54 +157,6 @@ void task_yield () {
     task_switch(DISPATCHER_TASK);
 }
 
-
-
-/* ============ FIM P3 ============ */
-
-/*
-* Description: Retorna um novo id para tarefa de forma sequencial
-* Args:
-* Return: novo ID para tarefa
-*/
-int new_task_id () {
-    int last = LAST_ID;
-    LAST_ID = LAST_ID + 1;
-    debug_print("new task id: %d\n", last);
-    return last;
-}
-
-/*
-* Description: Retorna um novo id para tarefa de forma sequencial
-* Args:
-* Return: novo ID para tarefa
-*/
-void set_actual_task(task_t *task){
-    ACTUAL_TASK = task;
-}
-
-/*
-* Description: Inicia tarefa principal
-* Args:
-* Return:
-*/
-void init_main_task(){
-    // Aloca espaço para task principal
-    MAIN_TASK = malloc(sizeof(task_t));
-    if(!MAIN_TASK){
-        perror ("Erro: não foi possível alocar task !") ;
-        return;
-    }
-    // Inicia os valores da task principal 
-    getcontext(&(MAIN_TASK->context));
-    MAIN_TASK->id = new_task_id();
-    MAIN_TASK->status = RUNNING;
-    MAIN_TASK->preemptable = 0;
-    // Coloca task principal como atual
-    set_actual_task(MAIN_TASK);
-}
-
-/*Fim funcoes auxiliares*/
-
 /*
 * Description: Inicia as estruturas necessarias para o ping pong os
 * Args:
@@ -162,12 +173,14 @@ void ppos_init (){
     // Cria dispatcher
     DISPATCHER_TASK = malloc(sizeof(task_t));
     if(!DISPATCHER_TASK){
-        perror ("Erro: não foi possível alocar task !") ;
+        fprintf(stderr,"Erro: não foi possível alocar task !") ;
         return;
     }
     task_create (DISPATCHER_TASK, dispatcher, NULL) ;
     
+    // Zera fila de execucao
     USER_TASKS = NULL;
+
     debug_print("Finalizou estruturas\n");
 }
 
@@ -197,7 +210,7 @@ int task_create (task_t *task, void (*start_routine)(void *),  void *arg) {
         context.uc_stack.ss_flags = 0 ;
         context.uc_link = 0 ;
     } else {
-        perror ("Erro na criação da pilha: ") ;
+        fprintf(stderr,"Erro na criação da pilha !\n") ;
         return -1;
     }
     // Cria contexto com funcao e argumentos passados
@@ -217,9 +230,6 @@ int task_create (task_t *task, void (*start_routine)(void *),  void *arg) {
         return -1;
     }
 
-    // debug_print("Tarefa adicionada a fila \n");
-    // queue_print("Fila: ", (queue_t *) USER_TASKS,  print_task);
-
     debug_print("Tarefa %d criada\n", task->id);
     return task->id;
 }
@@ -232,7 +242,12 @@ int task_create (task_t *task, void (*start_routine)(void *),  void *arg) {
 */
 int task_switch (task_t *task) {
     debug_print("Alterando tarefas...\n");
-    // TODO: Verificacoes
+
+    if(task == NULL){
+        fprintf(stderr, "A fila de tarefas ainda não existe !\n");
+        return -1;
+    }
+
     debug_print("Contexts: %p %p\n", &(ACTUAL_TASK->context), &(task->context));
     
     // Armazena tarefa atual
@@ -286,7 +301,7 @@ void task_exit (int exit_code) {
 */
 int task_id () {
     if(ACTUAL_TASK == NULL){
-        perror ("Tarefa atual não iniciada !") ;
+        fprintf(stderr,"Tarefa atual não iniciada ! \n") ;
         return -1;
     }
 

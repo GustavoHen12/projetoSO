@@ -26,12 +26,6 @@ typedef struct task_t
 #define STACKSIZE 64*1024	/* tamanho de pilha das threads */
 
 
-#ifdef DEBUG
-#define debug_print(...) do{ printf( __VA_ARGS__ ); } while(0)
-#else
-#define debug_print(...) do{ } while (0)
-#endif
-
 // estrutura que define um semáforo
 typedef struct
 {
