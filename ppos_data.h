@@ -20,7 +20,7 @@ typedef struct task_t
   ucontext_t context ;			// contexto armazenado da tarefa
   short status ;			// pronta, rodando, suspensa, ...
   short preemptable ;			// pode ser preemptada?
-   // ... (outros campos serão adicionados mais tarde)
+  int static_prio, dynamic_prio;			// prioridade da tarefa (-20 a +20)
 } task_t ;
 
 #define STACKSIZE 64*1024	/* tamanho de pilha das threads */

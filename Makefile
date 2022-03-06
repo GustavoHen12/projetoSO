@@ -5,6 +5,12 @@ COMPILER = -std=gnu99
 
 all: ppos_core
 
+ppos_core_p4: queue.o
+	gcc -Wall -o ppos_core_p4 queue.o $(CFLAGS) $(LDFLAGS) ppos_core.c testeP4_1.c $(DEBUG_FLAGS)
+
+ppos_core_p4_debug: queue.o
+	gcc -Wall -o ppos_core_p4 queue.o $(CFLAGS) $(LDFLAGS) -DDEBUG ppos_core.c testeP4_1.c $(DEBUG_FLAGS)
+
 ppos_core_p3_clean: queue.o
 	gcc -Wall -o ppos_core_p3 queue.o $(CFLAGS) $(LDFLAGS) ppos_core.c testeP3_1.c $(DEBUG_FLAGS)
 

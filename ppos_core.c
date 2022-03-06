@@ -20,6 +20,8 @@ short RUNNING = 2;
 short SUSPENDED = 3;
 short FINISHED = 4;
 
+int ALPHA_AGE = -1;
+
 // Macro para print quando executado em modo debug
 #ifdef DEBUG
 #define debug_print(...) do{ printf( __VA_ARGS__ ); } while(0)
@@ -72,7 +74,7 @@ void print_task (void *ptr)
    if (!elem)
       return ;
 
-   printf ("%d", elem->id) ;
+   printf ("%d*%d", elem->id, elem->dynamic_prio) ;
 }
 
 /*
@@ -94,6 +96,35 @@ void end_task (task_t *task){
 
 /* ============ FUNCOES ============ */
 
+
+void task_setprio (task_t *task, int prio) {
+    if(task == NULL || prio < -20 || prio > 20){
+        return;
+    }
+
+    task->static_prio = prio;
+    task->dynamic_prio = prio;
+}
+
+int task_getprio (task_t *task) {
+    return task == NULL ? ACTUAL_TASK->static_prio : task->static_prio;
+}
+
+task_t *getTaskBiggerPrio(task_t *queue){
+    task_t* temp = queue;
+    task_t* next = queue;
+    int size = queue_size((queue_t*) queue);
+    for(int i = 0; i < size; i++){
+        if(temp->dynamic_prio < next->dynamic_prio) {
+            next = temp;
+        }
+
+        temp = temp->next;
+    }
+
+    return next;
+}
+
 /*
 * Description: Função responsável por determinar qual a próxima tarefa que será executada
 * Args:
@@ -104,8 +135,23 @@ task_t *scheduler () {
         return NULL;
     }
 
-    task_t *next = USER_TASKS;
-    USER_TASKS = USER_TASKS->next;
+    task_t *next = getTaskBiggerPrio(USER_TASKS);
+
+    if(next != NULL){
+        // Envelhece as tarefas
+        task_t* temp = USER_TASKS;
+        int size = queue_size((queue_t*) USER_TASKS);
+        for(int i = 0; i < size; i++){
+            if(temp != next){
+                temp->dynamic_prio = temp->dynamic_prio + ALPHA_AGE;
+            }
+            temp = temp->next;
+        }
+
+        // Reseta prioridade dinamica
+        next->dynamic_prio = task_getprio(next);
+    }
+
 
     return next;
 }
@@ -224,11 +270,15 @@ int task_create (task_t *task, void (*start_routine)(void *),  void *arg) {
     task->next = NULL;
     task->prev = NULL;
 
-
+    // Adiciona a tarefa na fila de tarefa
     int result = queue_append((queue_t **)&USER_TASKS, (queue_t *) task);
     if(result < 0){
+        fprintf(stderr,"Não foi possível adicionar a tarefa na fila !\n") ;
         return -1;
     }
+
+    // Seta a prioridade da tarefa
+    task_setprio(task, 0);
 
     debug_print("Tarefa %d criada\n", task->id);
     return task->id;
