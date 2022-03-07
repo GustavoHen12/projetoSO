@@ -1,6 +1,6 @@
 // GRR20190485 Gustavo Henrique da Silva Barbosa
 
-// Based on:
+// From:
 // PingPongOS - PingPong Operating System
 // Prof. Carlos A. Maziero, DINF UFPR
 // Versão 1.4 -- Janeiro de 2022
@@ -20,10 +20,17 @@ typedef struct task_t
   ucontext_t context ;			// contexto armazenado da tarefa
   short status ;			// pronta, rodando, suspensa, ...
   short preemptable ;			// pode ser preemptada?
-  int static_prio, dynamic_prio;			// prioridade da tarefa (-20 a +20)
+  int static_prio, dynamic_prio;		// prioridade estática e dinamica da tarefa (-20 a +20) 
 } task_t ;
 
 #define STACKSIZE 64*1024	/* tamanho de pilha das threads */
+
+// Macro para print quando executado em modo debug
+#ifdef DEBUG
+#define debug_print(...) do{ printf( __VA_ARGS__ ); } while(0)
+#else
+#define debug_print(...) do{ } while (0)
+#endif
 
 
 // estrutura que define um semáforo

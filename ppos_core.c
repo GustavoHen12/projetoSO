@@ -20,15 +20,6 @@ short RUNNING = 2;
 short SUSPENDED = 3;
 short FINISHED = 4;
 
-int ALPHA_AGE = -1;
-
-// Macro para print quando executado em modo debug
-#ifdef DEBUG
-#define debug_print(...) do{ printf( __VA_ARGS__ ); } while(0)
-#else
-#define debug_print(...) do{ } while (0)
-#endif
-
 /* ============ FUNCOES AUXILIARES ============ */
 
 /*
@@ -64,19 +55,6 @@ void init_main_task(){
     ACTUAL_TASK = MAIN_TASK;
 }
 
-
-/* ============ TEMP ============ */
-
-void print_task (void *ptr)
-{
-   task_t *elem = ptr ;
-
-   if (!elem)
-      return ;
-
-   printf ("%d*%d", elem->id, elem->dynamic_prio) ;
-}
-
 /*
 * Description: Finaliza uma tarefa que já foi executada
 * Args: 
@@ -96,63 +74,86 @@ void end_task (task_t *task){
 
 /* ============ FUNCOES ============ */
 
-
+/*
+* Description: Altera a prioridade estática da tarefa e inicia a prioridade dinâmica 
+*   com a mesma prioridade. Se a tarefa não existir ou se o valor de prioridade 
+*   estiver fora do limite retorna sem alterar a prioridadeinicia a prioridade dinâmica com a mesma prioridade.
+* Args:
+* Return:
+*/
 void task_setprio (task_t *task, int prio) {
     if(task == NULL || prio < -20 || prio > 20){
         return;
     }
-
+    // Altera a prioridade estatica
     task->static_prio = prio;
     task->dynamic_prio = prio;
 }
 
+/*
+* Description: Verifica prioridade estatica da tarefa
+* Args:
+* Return: Se tak for null, prioridade da tarefa atual, caso contrário prioridade da tarefa
+*/
 int task_getprio (task_t *task) {
     return task == NULL ? ACTUAL_TASK->static_prio : task->static_prio;
 }
 
-task_t *getTaskBiggerPrio(task_t *queue){
-    task_t* temp = queue;
-    task_t* next = queue;
+/*
+* Description: Busca pela tarefa com maior prioridade dinamica. Caso exista mais de uma com
+* a mesma prioridade, a primeira da fila será a escolhida
+* Args:
+* Return: Retorna a tarefa
+*/
+task_t *get_priority_task(task_t *queue){
+    task_t* temp = queue; // Elemento a ser comparado
+    task_t* priority = queue; // Elemento com maior prioridade
     int size = queue_size((queue_t*) queue);
+    
     for(int i = 0; i < size; i++){
-        if(temp->dynamic_prio < next->dynamic_prio) {
-            next = temp;
+        // Verifica se o valor da prioridade do elemento atual é estritamente
+        // menor que a do com maior prioridade
+        if(priority->dynamic_prio > temp->dynamic_prio) {
+            priority = temp;
         }
 
         temp = temp->next;
     }
 
-    return next;
+    return priority;
 }
 
 /*
 * Description: Função responsável por determinar qual a próxima tarefa que será executada
 * Args:
-* Return:
+* Return: Tarefa prioritário (com base na prioridade dinâmica) da lista
 */
 task_t *scheduler () {
     if(!USER_TASKS){
         return NULL;
     }
 
-    task_t *next = getTaskBiggerPrio(USER_TASKS);
+    // Busca a tarefa prioritária da fila para execução
+    task_t *next = get_priority_task(USER_TASKS);
 
     if(next != NULL){
-        // Envelhece as tarefas
+
+        // Percorre a fila de tarefas envelhecendo elas
         task_t* temp = USER_TASKS;
         int size = queue_size((queue_t*) USER_TASKS);
         for(int i = 0; i < size; i++){
+            // A única que não sofre de envelhecimento é a tarefa que será executada
             if(temp != next){
-                temp->dynamic_prio = temp->dynamic_prio + ALPHA_AGE;
+                temp->dynamic_prio = temp->dynamic_prio -1;
             }
             temp = temp->next;
         }
 
-        // Reseta prioridade dinamica
+        // Reseta prioridade dinamica da tarefa a ser executada
         next->dynamic_prio = task_getprio(next);
     }
 
-
+    // Retorna próxima tarefa
     return next;
 }
 

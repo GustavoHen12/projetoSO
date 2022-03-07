@@ -343,3 +343,14 @@ int main (int argc, char **argv, char **envp)
    exit(0) ;
 }
 
+// /* ============ TEMP ============ */
+
+// void print_task (void *ptr)
+// {
+//    task_t *elem = ptr ;
+
+//    if (!elem)
+//       return ;
+
+//    printf ("%d*%d", elem->id, elem->dynamic_prio) ;
+// }
