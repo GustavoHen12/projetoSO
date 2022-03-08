@@ -82,12 +82,16 @@ void end_task (task_t *task){
 * Return:
 */
 void task_setprio (task_t *task, int prio) {
-    if(task == NULL || prio < -20 || prio > 20){
+    if(prio < -20 || prio > 20){
         return;
     }
-    // Altera a prioridade estatica
-    task->static_prio = prio;
-    task->dynamic_prio = prio;
+
+    // Verifica qual sera a tarefa alterada
+    task_t * target_task = task == NULL ? ACTUAL_TASK : task;
+    
+    // Altera a prioridade
+    target_task->static_prio = prio;
+    target_task->dynamic_prio = prio;
 }
 
 /*
