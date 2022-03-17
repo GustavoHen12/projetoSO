@@ -72,6 +72,30 @@ void end_task (task_t *task){
     task->id = -1;
 }
 
+/*
+* Description: Busca pela tarefa com maior prioridade dinamica. Caso exista mais de uma com
+* a mesma prioridade, a primeira da fila será a escolhida
+* Args:
+* Return: Retorna a tarefa
+*/
+task_t *get_priority_task(task_t *queue){
+    task_t* temp = queue; // Elemento a ser comparado
+    task_t* priority = queue; // Elemento com maior prioridade
+    int size = queue_size((queue_t*) queue);
+    
+    for(int i = 0; i < size; i++){
+        // Verifica se o valor da prioridade do elemento atual é estritamente
+        // menor que a do com maior prioridade
+        if(priority->dynamic_prio > temp->dynamic_prio) {
+            priority = temp;
+        }
+
+        temp = temp->next;
+    }
+
+    return priority;
+}
+
 /* ============ FUNCOES ============ */
 
 /*
@@ -101,30 +125,6 @@ void task_setprio (task_t *task, int prio) {
 */
 int task_getprio (task_t *task) {
     return task == NULL ? ACTUAL_TASK->static_prio : task->static_prio;
-}
-
-/*
-* Description: Busca pela tarefa com maior prioridade dinamica. Caso exista mais de uma com
-* a mesma prioridade, a primeira da fila será a escolhida
-* Args:
-* Return: Retorna a tarefa
-*/
-task_t *get_priority_task(task_t *queue){
-    task_t* temp = queue; // Elemento a ser comparado
-    task_t* priority = queue; // Elemento com maior prioridade
-    int size = queue_size((queue_t*) queue);
-    
-    for(int i = 0; i < size; i++){
-        // Verifica se o valor da prioridade do elemento atual é estritamente
-        // menor que a do com maior prioridade
-        if(priority->dynamic_prio > temp->dynamic_prio) {
-            priority = temp;
-        }
-
-        temp = temp->next;
-    }
-
-    return priority;
 }
 
 /*
