@@ -2,6 +2,8 @@
 
 #include<stdio.h>
 #include<stdlib.h>
+#include <sys/time.h>
+#include <signal.h>
 #include"ppos.h"
 #include"queue.h"
 
@@ -19,6 +21,17 @@ short READY = 1;
 short RUNNING = 2;
 short SUSPENDED = 3;
 short FINISHED = 4;
+
+
+// estrutura que define um tratador de sinal (deve ser global ou static)
+struct sigaction action ;
+
+// estrutura de inicialização to timer
+struct itimerval timer;
+
+unsigned int CURRENT_TIME = 0;
+int QUANTUM_INTERVAL = 20; // Número de ticks em um quantum
+int QUANTUM_COUNTER = 20; // Contador do quantum
 
 /* ============ FUNCOES AUXILIARES ============ */
 
@@ -98,6 +111,20 @@ task_t *get_priority_task(task_t *queue){
 
 /* ============ FUNCOES ============ */
 
+// tratador do sinal
+void timer_interruption_handler (int signum) {
+    CURRENT_TIME++;
+    if((!ACTUAL_TASK->system_task) && (--QUANTUM_COUNTER <= 0)) {
+        debug_print("Fim do quantum \n");
+        QUANTUM_COUNTER = 20;
+        task_yield();
+    }
+}
+
+
+unsigned int systime () {
+    return CURRENT_TIME;
+}
 /*
 * Description: Altera a prioridade estática da tarefa e inicia a prioridade dinâmica 
 *   com a mesma prioridade. Se a tarefa não existir ou se o valor de prioridade 
@@ -208,6 +235,30 @@ void task_yield () {
     task_switch(DISPATCHER_TASK);
 }
 
+int init_time_interruption (int interval_usec) {
+    action.sa_handler = timer_interruption_handler ;
+    sigemptyset (&action.sa_mask) ;
+    action.sa_flags = 0 ;
+    if (sigaction (SIGALRM, &action, 0) < 0) {
+        fprintf(stderr,"Erro: não foi possível inciar sigaction!\n") ;
+        return 0;
+    }
+
+    // Configura valor do temporizador
+    timer.it_value.tv_usec = interval_usec;
+    timer.it_value.tv_sec  = 0;
+    timer.it_interval.tv_usec = interval_usec;
+    timer.it_interval.tv_sec  = 0;
+
+    // Arma temporizador
+    if (setitimer (ITIMER_REAL, &timer, 0) < 0) {
+        fprintf(stderr,"Erro: não foi possível armar temporizador setitimer!\n") ;
+        return 0;
+    }
+
+    return 1;
+}
+
 /*
 * Description: Inicia as estruturas necessarias para o ping pong os
 * Args:
@@ -228,9 +279,17 @@ void ppos_init (){
         return;
     }
     task_create (DISPATCHER_TASK, dispatcher, NULL) ;
+    DISPATCHER_TASK->system_task = 1;
     
     // Zera fila de execucao
     USER_TASKS = NULL;
+
+    // Inicia interrupção de tempo
+    if(!init_time_interruption(1000)){
+        fprintf(stderr,"Erro: não foi possível iniciar as interrupções por tempo !\n") ;
+        return;
+    }
+
 
     debug_print("Finalizou estruturas\n");
 }
@@ -274,6 +333,12 @@ int task_create (task_t *task, void (*start_routine)(void *),  void *arg) {
     task->preemptable = 0;
     task->next = NULL;
     task->prev = NULL;
+    task->system_task = 0;
+
+    // tempo
+    task->execinfo.creation_time = systime();
+    task->execinfo.processor_time = 0;
+    task->execinfo.activations = 0;
 
     // Adiciona a tarefa na fila de tarefa
     int result = queue_append((queue_t **)&USER_TASKS, (queue_t *) task);
@@ -316,6 +381,13 @@ int task_switch (task_t *task) {
         old_task->status = SUSPENDED;
     }
 
+    // Contabiliza o tempo que a tarefa ficou em execucao
+    old_task->execinfo.processor_time += (systime() - old_task->execinfo.start_last_run);
+
+    // Inicia variavel para contabilizar o tempo em que a tarefa atual ficara em exec
+    task->execinfo.start_last_run = systime();
+    task->execinfo.activations++;
+
     // Altera status da atual tarefa para executando 
     task->status = RUNNING;
     
@@ -344,6 +416,8 @@ void task_exit (int exit_code) {
     // Altera status da proxima tarefa como rodando
     next_task->status = RUNNING;
     
+    unsigned int execution_time = systime() - old_task->execinfo.creation_time;
+    printf("Task %d exit: execution time %d ms, processor time %d ms, %d activations\n", old_task->id, execution_time, old_task->execinfo.processor_time, old_task->execinfo.activations);
     // Troca contextos
     task_switch(next_task);
     debug_print("Tarefas finalizadas\n");

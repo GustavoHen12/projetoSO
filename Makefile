@@ -1,12 +1,12 @@
 CFLAGS = -Wall
 LDFLAGS = -lm
-DEBUG_FLAGS = -g
+DEBUG_FLAGS = -g -DDEBUG
 COMPILER = -std=gnu99
 
-all: ppos_core_debug
+all: ppos_core
 
 ppos_core: queue.o
-	gcc -Wall -o ppos_core_p$(P) queue.o $(CFLAGS) $(LDFLAGS) ppos_core.c testeP$(P)_$(T).c $(DEBUG_FLAGS)
+	gcc -Wall -o ppos_core_p$(P) queue.o $(CFLAGS) $(LDFLAGS) ppos_core.c testeP$(P)_$(T).c
 
 ppos_core_debug: queue.o
 	gcc -Wall -o ppos_core_p$(P) queue.o $(CFLAGS) $(LDFLAGS) ppos_core.c testeP$(P)_$(T).c $(DEBUG_FLAGS)
