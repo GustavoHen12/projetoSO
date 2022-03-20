@@ -12,17 +12,17 @@
 
 #include <ucontext.h>		// biblioteca POSIX de trocas de contexto
 
-//
+// Estrutura que aramzena informações a respeito
+// da execução da tarefa
 typedef struct execinfo_t
 {
-  // unsigned int execution_time; 
-  int activations;
+  int activations; // Número de ativiações
 
-  unsigned int processor_time;
-  unsigned int start_last_run;
+  unsigned int processor_time; // Tempo total que ficou em execução
+  unsigned int start_last_run; // Momento (ms) que iniciou a execução na última vez
 
-  unsigned int creation_time;
-  unsigned int kill_time;
+  unsigned int creation_time; // Momento (ms) que a tarefa foi criada
+  unsigned int kill_time; // Momento (ms) que a tarefa finalizou a execução
 } execinfo_t ;
 
 // Estrutura que define um Task Control Block (TCB)
@@ -35,7 +35,7 @@ typedef struct task_t
   short preemptable ;			// pode ser preemptada?
   int static_prio, dynamic_prio;		// prioridade estática e dinamica da tarefa (-20 a +20) 
   int system_task;		// Flag para identificar se tarefa do sistema ou do usuário
-  execinfo_t execinfo;
+  execinfo_t execinfo;		// Informações da execução da tarefa
 } task_t ;
 
 #define STACKSIZE 64*1024	/* tamanho de pilha das threads */

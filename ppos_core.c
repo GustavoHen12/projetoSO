@@ -22,16 +22,13 @@ short RUNNING = 2;
 short SUSPENDED = 3;
 short FINISHED = 4;
 
-
-// estrutura que define um tratador de sinal (deve ser global ou static)
-struct sigaction action ;
-
-// estrutura de inicialização to timer
-struct itimerval timer;
-
-unsigned int CURRENT_TIME = 0;
+// Variaveis para preempção e compartilhamento de tempo
+struct sigaction action ; // Estrutura que define um tratador de sinal para interrupcao de tempo
+struct itimerval timer; // Estrutura de inicialização to timer
 int QUANTUM_INTERVAL = 20; // Número de ticks em um quantum
 int QUANTUM_COUNTER = 20; // Contador do quantum
+
+unsigned int CURRENT_TIME = 0; // Variável com tempo atual desde o começo da execução em ms
 
 /* ============ FUNCOES AUXILIARES ============ */
 
@@ -109,22 +106,62 @@ task_t *get_priority_task(task_t *queue){
     return priority;
 }
 
-/* ============ FUNCOES ============ */
+/*
+* Description: Cria as estruturas para tratar interrupção e inicia temporizador
+* Args:
+* Return:
+*/
+int init_time_interruption (int interval_usec) {
+    // Inicia ação que será gerada para tratar a interrupção
+    action.sa_handler = timer_interruption_handler ;
+    sigemptyset (&action.sa_mask) ;
+    action.sa_flags = 0 ;
+    if (sigaction (SIGALRM, &action, 0) < 0) {
+        fprintf(stderr,"Erro: não foi possível inciar sigaction!\n") ;
+        return 0;
+    }
 
-// tratador do sinal
+    // Configura valor do temporizador
+    timer.it_value.tv_usec = interval_usec;
+    timer.it_value.tv_sec  = 0;
+    timer.it_interval.tv_usec = interval_usec;
+    timer.it_interval.tv_sec  = 0;
+
+    // Arma temporizador
+    if (setitimer (ITIMER_REAL, &timer, 0) < 0) {
+        fprintf(stderr,"Erro: não foi possível armar temporizador setitimer!\n") ;
+        return 0;
+    }
+
+    return 1;
+}
+
+/* ============ FUNCOES PRINCIPAIS ============ */
+
+/*
+* Description: Trata as interrupções de tempo
+*   Incrementa varável que armazena tempo atual
+*   Se for um fim de quantum e não for uma tarefa do sistema gera um task_yeld
+* Args:
+* Return:
+*/
 void timer_interruption_handler (int signum) {
     CURRENT_TIME++;
     if((!ACTUAL_TASK->system_task) && (--QUANTUM_COUNTER <= 0)) {
-        debug_print("Fim do quantum \n");
         QUANTUM_COUNTER = 20;
         task_yield();
     }
 }
 
-
+/*
+* Description: Retorna o intervalo em ms entre o inicio da execução e agora
+* Args:
+* Return:
+*/
 unsigned int systime () {
     return CURRENT_TIME;
 }
+
 /*
 * Description: Altera a prioridade estática da tarefa e inicia a prioridade dinâmica 
 *   com a mesma prioridade. Se a tarefa não existir ou se o valor de prioridade 
@@ -235,30 +272,6 @@ void task_yield () {
     task_switch(DISPATCHER_TASK);
 }
 
-int init_time_interruption (int interval_usec) {
-    action.sa_handler = timer_interruption_handler ;
-    sigemptyset (&action.sa_mask) ;
-    action.sa_flags = 0 ;
-    if (sigaction (SIGALRM, &action, 0) < 0) {
-        fprintf(stderr,"Erro: não foi possível inciar sigaction!\n") ;
-        return 0;
-    }
-
-    // Configura valor do temporizador
-    timer.it_value.tv_usec = interval_usec;
-    timer.it_value.tv_sec  = 0;
-    timer.it_interval.tv_usec = interval_usec;
-    timer.it_interval.tv_sec  = 0;
-
-    // Arma temporizador
-    if (setitimer (ITIMER_REAL, &timer, 0) < 0) {
-        fprintf(stderr,"Erro: não foi possível armar temporizador setitimer!\n") ;
-        return 0;
-    }
-
-    return 1;
-}
-
 /*
 * Description: Inicia as estruturas necessarias para o ping pong os
 * Args:
@@ -335,7 +348,7 @@ int task_create (task_t *task, void (*start_routine)(void *),  void *arg) {
     task->prev = NULL;
     task->system_task = 0;
 
-    // tempo
+    // Inicia campos da estrutura de tempo
     task->execinfo.creation_time = systime();
     task->execinfo.processor_time = 0;
     task->execinfo.activations = 0;
@@ -381,11 +394,13 @@ int task_switch (task_t *task) {
         old_task->status = SUSPENDED;
     }
 
-    // Contabiliza o tempo que a tarefa ficou em execucao
+    // Contabiliza o tempo que a tarefa antiga ficou em execucao
     old_task->execinfo.processor_time += (systime() - old_task->execinfo.start_last_run);
 
-    // Inicia variavel para contabilizar o tempo em que a tarefa atual ficara em exec
+    // Altera variavel com o tempo incial da execução da tarefa atual
     task->execinfo.start_last_run = systime();
+
+    // Incrementa o número de ativações da tarefa
     task->execinfo.activations++;
 
     // Altera status da atual tarefa para executando 
@@ -416,8 +431,11 @@ void task_exit (int exit_code) {
     // Altera status da proxima tarefa como rodando
     next_task->status = RUNNING;
     
-    unsigned int execution_time = systime() - old_task->execinfo.creation_time;
+    // Seta o momento final de execução e imprime dados de execução
+    old_task->execinfo.kill_time = systime();
+    unsigned int execution_time = old_task->execinfo.kill_time - old_task->execinfo.creation_time;
     printf("Task %d exit: execution time %d ms, processor time %d ms, %d activations\n", old_task->id, execution_time, old_task->execinfo.processor_time, old_task->execinfo.activations);
+    
     // Troca contextos
     task_switch(next_task);
     debug_print("Tarefas finalizadas\n");
