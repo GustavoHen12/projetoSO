@@ -106,6 +106,23 @@ task_t *get_priority_task(task_t *queue){
     return priority;
 }
 
+/* ============ FUNCOES PRINCIPAIS ============ */
+
+/*
+* Description: Trata as interrupções de tempo
+*   Incrementa varável que armazena tempo atual
+*   Se for um fim de quantum e não for uma tarefa do sistema gera um task_yeld
+* Args:
+* Return:
+*/
+void timer_interruption_handler (int signum) {
+    CURRENT_TIME++;
+    if((!ACTUAL_TASK->system_task) && (--QUANTUM_COUNTER <= 0)) {
+        QUANTUM_COUNTER = 20;
+        task_yield();
+    }
+}
+
 /*
 * Description: Cria as estruturas para tratar interrupção e inicia temporizador
 * Args:
@@ -134,23 +151,6 @@ int init_time_interruption (int interval_usec) {
     }
 
     return 1;
-}
-
-/* ============ FUNCOES PRINCIPAIS ============ */
-
-/*
-* Description: Trata as interrupções de tempo
-*   Incrementa varável que armazena tempo atual
-*   Se for um fim de quantum e não for uma tarefa do sistema gera um task_yeld
-* Args:
-* Return:
-*/
-void timer_interruption_handler (int signum) {
-    CURRENT_TIME++;
-    if((!ACTUAL_TASK->system_task) && (--QUANTUM_COUNTER <= 0)) {
-        QUANTUM_COUNTER = 20;
-        task_yield();
-    }
 }
 
 /*
