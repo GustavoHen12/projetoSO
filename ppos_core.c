@@ -60,7 +60,7 @@ void init_main_task(){
     getcontext(&(MAIN_TASK->context));
     MAIN_TASK->id = new_task_id();
     MAIN_TASK->status = RUNNING;
-    MAIN_TASK->preemptable = 0;
+    MAIN_TASK->preemptable = 1;
     // Coloca task principal como atual
     ACTUAL_TASK = MAIN_TASK;
 }
@@ -294,8 +294,14 @@ void ppos_init (){
     task_create (DISPATCHER_TASK, dispatcher, NULL) ;
     DISPATCHER_TASK->system_task = 1;
     
-    // Zera fila de execucao
+    // Zera fila de execucao e adiciona tarefa principal
     USER_TASKS = NULL;
+    
+    int result = queue_append((queue_t **)&USER_TASKS, (queue_t *) MAIN_TASK);
+    if(result < 0){
+        fprintf(stderr,"Não foi possível adicionar a tarefa na fila !\n") ;
+        return;
+    }
 
     // Inicia interrupção de tempo
     if(!init_time_interruption(1000)){
@@ -303,6 +309,8 @@ void ppos_init (){
         return;
     }
 
+    // Passa controle para o dispatcher
+    task_yield();
 
     debug_print("Finalizou estruturas\n");
 }
@@ -343,7 +351,7 @@ int task_create (task_t *task, void (*start_routine)(void *),  void *arg) {
     task->context = context;
     task->id = new_task_id();
     task->status = READY;
-    task->preemptable = 0;
+    task->preemptable = 1;
     task->next = NULL;
     task->prev = NULL;
     task->system_task = 0;
