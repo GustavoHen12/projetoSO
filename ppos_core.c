@@ -13,6 +13,7 @@ task_t *MAIN_TASK; // Tarefa principal
 task_t *ACTUAL_TASK; // Tarefa em execução no momento
 task_t *DISPATCHER_TASK; // Tarefa para o dispatcher
 task_t *USER_TASKS; // Fila de tarefas do usuário
+task_t *SUSPENDED_TASKS; // Fila de tarefas do usuário
 
 int LAST_ID = 0; // Varável para controle dos ids das tarefas
 
@@ -106,7 +107,70 @@ task_t *get_priority_task(task_t *queue){
     return priority;
 }
 
+
+void awake_tasks (task_t **queue) {
+    // Percorre a lista
+    while(queue_size((queue_t *) *queue) > 0) {
+        // Coloca a tarefa na fila de prontos e retira da fila
+        if(task_resume(*queue, queue) < 0){
+            break;
+        }
+    }
+}
+
+void task_suspend (task_t **queue) {
+    // Retira tarefa da fila de prontas
+    int result = queue_remove((queue_t **) &USER_TASKS, (queue_t *) ACTUAL_TASK);
+    if(result < 0) {
+        fprintf(stderr,"Não foi possível remover a tarefa atual da fila fila !\n") ;
+        return;
+    }
+
+    // Coloca como suspensa
+    ACTUAL_TASK->status = SUSPENDED;
+
+    // Adiciona na fila queue
+    queue_append((queue_t **) queue, (queue_t *) ACTUAL_TASK);
+
+    // Coloca a tarefa do Dispather como corrente
+    DISPATCHER_TASK->status = RUNNING;
+
+    // Volta para o dispatcher
+    task_switch(DISPATCHER_TASK);
+
+}
+
+int task_resume (task_t * task, task_t **queue) {
+    // Retira tarefa da fila queue
+    int result = queue_remove((queue_t **) queue, (queue_t *) task);
+    if(result < 0) {
+        fprintf(stderr,"Não foi possível remover a tarefa da fila fila !\n") ;
+        return -1;
+    }
+
+    // Coloca como pronta
+    ACTUAL_TASK->status = READY;
+
+    // Adiciona na fila queue
+    queue_append((queue_t **) &USER_TASKS, (queue_t *) task);
+
+    return 0;
+}
+
+
 /* ============ FUNCOES PRINCIPAIS ============ */
+
+int task_join (task_t *task) {
+    if(queue_find((queue_t**) &USER_TASKS, (queue_t *) task)){
+        // Suspende tarefa
+        task_suspend(&(task->tasks_waiting));
+
+        // Retorna o exit code
+        return (task->execinfo).exit_code;
+    }
+
+    return -3;
+}
 
 /*
 * Description: Trata as interrupções de tempo
@@ -247,6 +311,7 @@ void dispatcher () {
 
            // Verifica status de saida
            if(next_task->status == FINISHED){
+               awake_tasks(&(next_task->tasks_waiting));
                end_task(next_task);
            }
        }
@@ -444,6 +509,9 @@ void task_exit (int exit_code) {
     unsigned int execution_time = old_task->execinfo.kill_time - old_task->execinfo.creation_time;
     printf("Task %d exit: execution time %d ms, processor time %d ms, %d activations\n", old_task->id, execution_time, old_task->execinfo.processor_time, old_task->execinfo.activations);
     
+    // Salva o exit_code
+    (old_task->execinfo).exit_code = exit_code;
+
     // Troca contextos
     task_switch(next_task);
     debug_print("Tarefas finalizadas\n");

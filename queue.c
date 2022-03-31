@@ -154,3 +154,37 @@ int queue_remove (queue_t **queue, queue_t *elem) {
 
     return 0;   
 }
+
+int queue_find (queue_t **queue, queue_t *elem) {
+     if(queue == NULL) {
+        fprintf(stderr, "A fila ainda não existe !");
+        return -1;
+    }
+
+    if(queue_size(*queue) <= 0){
+        fprintf(stderr, "A fila não pode estar vazia !");
+        return -1;   
+    }
+
+    if(elem == NULL){
+        fprintf(stderr, "O elemento a ser removido não existe !");
+        return -1;
+    }
+
+    // Itera sobre a fila até o final dela ou encontrar o elemento a ser removido
+    queue_t *inicial = NULL;
+    queue_t *atual = *queue;
+    while(atual != NULL && atual != inicial && atual != elem) {
+        if(inicial == NULL){
+            inicial = atual;
+        }
+        atual = atual->next;
+    }
+
+    // Verifica se chegou até o final da fila sem encontrar o elemento
+    if(atual == inicial){
+        return 0;
+    }
+
+    return 1;   
+}
