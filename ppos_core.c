@@ -13,7 +13,8 @@ task_t *MAIN_TASK; // Tarefa principal
 task_t *ACTUAL_TASK; // Tarefa em execução no momento
 task_t *DISPATCHER_TASK; // Tarefa para o dispatcher
 task_t *USER_TASKS; // Fila de tarefas do usuário
-task_t *SUSPENDED_TASKS; // Fila de tarefas do usuário
+task_t *SUSPENDED_TASKS; // Fila de tarefas esperando o fim de outra tarefa
+task_t *SLEEPING_TASKS; // Fila de tarefas dormindo
 
 int LAST_ID = 0; // Varável para controle dos ids das tarefas
 
@@ -107,22 +108,29 @@ task_t *get_priority_task(task_t *queue){
     return priority;
 }
 
-
+/*
+* Description: Acorda todas as tarefas da fila queue colocando na fila de prontos
+* Args:
+* Return:
+*/
 void awake_tasks (task_t **queue) {
     // Percorre a lista
     while(queue_size((queue_t *) *queue) > 0) {
         // Coloca a tarefa na fila de prontos e retira da fila
-        if(task_resume(*queue, queue) < 0){
-            break;
-        }
+        task_resume(*queue, queue);
     }
 }
 
+/*
+* Description: Suspende tarefa atual, retinando da fila de prontas e adiciona em queu
+* Args:
+* Return:
+*/
 void task_suspend (task_t **queue) {
     // Retira tarefa da fila de prontas
     int result = queue_remove((queue_t **) &USER_TASKS, (queue_t *) ACTUAL_TASK);
     if(result < 0) {
-        fprintf(stderr,"Não foi possível remover a tarefa atual da fila fila !\n") ;
+        fprintf(stderr,"\nNão foi possível remover a tarefa atual [%d] da fila fila !\n", ACTUAL_TASK->id) ;
         return;
     }
 
@@ -140,12 +148,17 @@ void task_suspend (task_t **queue) {
 
 }
 
-int task_resume (task_t * task, task_t **queue) {
+/*
+* Description: Retira task da fila queue e adiciona na fila de prontos
+* Args:
+* Return:
+*/
+void task_resume (task_t * task, task_t **queue) {
     // Retira tarefa da fila queue
     int result = queue_remove((queue_t **) queue, (queue_t *) task);
     if(result < 0) {
-        fprintf(stderr,"Não foi possível remover a tarefa da fila fila !\n") ;
-        return -1;
+        fprintf(stderr,"Não foi possível remover a tarefa %d da fila fila !\n", task->id) ;
+        return;
     }
 
     // Coloca como pronta
@@ -154,12 +167,52 @@ int task_resume (task_t * task, task_t **queue) {
     // Adiciona na fila queue
     queue_append((queue_t **) &USER_TASKS, (queue_t *) task);
 
-    return 0;
+    return;
 }
 
+/*
+* Description: Acorda as tarefas que estão dormindo e que devem ser acordadas
+* Args:
+* Return:
+*/
+void acorda_tarefas_dormindo () {
+    // Percorre a lista de tarefas
+    task_t *inicial = NULL;
+    task_t *atual = SLEEPING_TASKS;
+    while(atual != NULL && atual != inicial) {
+        // Se chegou o momento acorda a tarefa
+        if(systime() >= atual->awake_time){
+            task_resume(atual, &SLEEPING_TASKS);
+            atual = SLEEPING_TASKS;
+        } else {
+            if(inicial == NULL){
+                inicial = atual;
+            }
+            atual = atual->next;
+        }
+    }
 
+}
 /* ============ FUNCOES PRINCIPAIS ============ */
+/*
+* Description: Suspende a tarefa atual por um periodo t em ms
+* Args:
+* Return:
+*/
+void task_sleep (int t) {
+    // Adiciona momento para acordar a tarefa
+    ACTUAL_TASK->awake_time = t + systime();
 
+    // Suspende tarefa
+    task_suspend(&SLEEPING_TASKS);
+}
+
+/*
+* Description: Suspende a tarefa atual até o momento que a tarefa task finalizar
+* Args:
+* Return: Se funcionau corretamente, retorna o código de saída da terefa esperada
+*   caso contrário um valor menor que 0
+*/
 int task_join (task_t *task) {
     if(queue_find((queue_t**) &USER_TASKS, (queue_t *) task)){
         // Suspende tarefa
@@ -299,21 +352,26 @@ void dispatcher () {
     debug_print("Inicio dispatcher...\n");
 
    // Enquanto houver tarefas a serem executadas
-   while(queue_size((queue_t *) USER_TASKS) > 0){
-       // Escolhe a próxima tarefa a executar
-       task_t *next_task = scheduler();
+   while((queue_size((queue_t *) USER_TASKS) > 0) || (queue_size((queue_t *) SLEEPING_TASKS) > 0)){
+        if(queue_size((queue_t *) SLEEPING_TASKS) > 0){
+           acorda_tarefas_dormindo();
+       }
+       if(queue_size((queue_t *) USER_TASKS) > 0) {
+        // Escolhe a próxima tarefa a executar
+        task_t *next_task = scheduler();
 
-       // Se houver próxima tarefa
-       if (next_task != NULL) {
-           // Coloca em execução
-           debug_print("Próxima tarefa: %d\n", next_task->id);
-           task_switch(next_task);
+        // Se houver próxima tarefa
+        if (next_task != NULL) {
+            // Coloca em execução
+            debug_print("Próxima tarefa: %d\n", next_task->id);
+            task_switch(next_task);
 
-           // Verifica status de saida
-           if(next_task->status == FINISHED){
-               awake_tasks(&(next_task->tasks_waiting));
-               end_task(next_task);
-           }
+            // Verifica status de saida
+            if(next_task->status == FINISHED){
+                awake_tasks(&(next_task->tasks_waiting));
+                end_task(next_task);
+            }
+        }
        }
    }
 
@@ -364,7 +422,7 @@ void ppos_init (){
     
     int result = queue_append((queue_t **)&USER_TASKS, (queue_t *) MAIN_TASK);
     if(result < 0){
-        fprintf(stderr,"Não foi possível adicionar a tarefa na fila !\n") ;
+        fprintf(stderr,"Não foi possível adicionar a tarefa MAIN na fila !\n") ;
         return;
     }
 

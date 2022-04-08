@@ -38,7 +38,8 @@ typedef struct task_t
   int static_prio, dynamic_prio;		// prioridade estática e dinamica da tarefa (-20 a +20) 
   int system_task;		// Flag para identificar se tarefa do sistema ou do usuário
   execinfo_t execinfo;		// Informações da execução da tarefa
-  struct task_t *tasks_waiting; // Fila com as tarefas que estão esperando a task ser concluida 
+  struct task_t *tasks_waiting; // Fila com as tarefas que estão esperando a task ser concluida
+  int awake_time; // Tempo que a tarefa deve dormir
 } task_t ;
 
 #define STACKSIZE 64*1024	/* tamanho de pilha das threads */
