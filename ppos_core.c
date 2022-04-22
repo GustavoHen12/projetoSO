@@ -130,7 +130,7 @@ void task_suspend (task_t **queue) {
     // Retira tarefa da fila de prontas
     int result = queue_remove((queue_t **) &USER_TASKS, (queue_t *) ACTUAL_TASK);
     if(result < 0) {
-        fprintf(stderr,"\nNão foi possível remover a tarefa atual [%d] da fila fila !\n", ACTUAL_TASK->id) ;
+        fprintf(stderr,"\ntask_suspend: Não foi possível remover a tarefa atual [%d] da fila fila !\n", ACTUAL_TASK->id) ;
         return;
     }
 
@@ -587,4 +587,73 @@ int task_id () {
     }
 
     return ACTUAL_TASK->id;
+}
+
+
+/* ============ FUNCOES IPC ============ */
+
+void enter_cs (int *lock)
+{
+  // atomic OR (Intel macro for GCC)
+  while (__sync_fetch_and_or (lock, 1)) ;   // busy waiting
+}
+ 
+void leave_cs (int *lock)
+{
+  (*lock) = 0 ;
+}
+ 
+int sem_create (semaphore_t *s, int value) {
+    s->counter = value;
+    s->queue = NULL;
+    s->lock = 0;
+
+    return 0;
+}
+
+int sem_down (semaphore_t *s) {
+    if(s == NULL){
+        fprintf(stderr, "Semaforo não existe !\n");
+        return -1;
+    }
+
+    enter_cs(&s->lock);
+    s->counter--;
+    leave_cs(&s->lock);
+    if(s->counter < 0){
+        task_suspend(&(s->queue));
+        if(s == NULL){ // Se o semaforo foi destruido
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int sem_up (semaphore_t *s) {
+    if(s == NULL) {
+        fprintf(stderr, "Semaforo não existe !\n");
+        return -1;
+    }
+    enter_cs(&s->lock);
+
+    s->counter++;
+    leave_cs(&s->lock);
+
+    if(s->counter <= 0) {
+        task_resume(s->queue, &s->queue);
+    }
+
+    return 0;
+}
+
+int sem_destroy (semaphore_t *s) {
+    awake_tasks(&s->queue);
+    if(s->queue != NULL){
+        return -1;
+    }
+
+    s->counter = 0;
+    s = NULL;
+    return 0;
 }
