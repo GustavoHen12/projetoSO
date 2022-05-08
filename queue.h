@@ -58,16 +58,6 @@ int queue_append (queue_t **queue, queue_t *elem) ;
 
 int queue_remove (queue_t **queue, queue_t *elem) ;
 
-//------------------------------------------------------------------------------
-// Verifica se um elemento especifico esta presente na fila.
-// Condicoes a verificar, gerando msgs de erro:
-// - a fila deve existir
-// - a fila nao deve estar vazia
-// - o elemento deve existir
-// - o elemento deve pertencer a fila indicada
-// Retorno: 1 se existir, 0 se não existir, <0 se ocorreu algum erro
-
-int queue_find (queue_t **queue, queue_t *elem) ;
 
 #endif
 
