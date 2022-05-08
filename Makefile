@@ -11,6 +11,9 @@ ppos_core: queue.o
 ppos_core_debug: queue.o
 	gcc -Wall -o ppos_core_p$(P) queue.o $(CFLAGS) $(LDFLAGS) ppos_core.c testeP$(P)_$(T).c $(DEBUG_FLAGS)
 
+ppos_core_prodcons: queue.o
+	gcc -Wall -o ppos_core_prodcons queue.o $(CFLAGS) $(LDFLAGS) ppos_core.c pingpong-prodcons.c
+
 ########
 ppos_core_p2:
 	for number in 1 2 3 ; do \
