@@ -19,7 +19,7 @@ task_t *SLEEPING_TASKS; // Fila de tarefas dormindo
 
 int LAST_ID = 0; // Variável para controle dos ids das tarefas
 
-int lock_intrp = 0; // Desabilita preenpcao por tempo
+int LOCK_INTRPT = 0; // Desabilita preenpcao por tempo
 
 // Status das tarefas
 short READY = 1;
@@ -196,6 +196,44 @@ void acorda_tarefas_dormindo () {
     }
 
 }
+/*
+* Description: Encontra tarefa em uma fila
+* Args:
+* Return: 1 se encontra, 0 se não encontra, -1 se houve erro
+*/
+int task_find (task_t **queue, task_t *elem) {
+     if(queue == NULL) {
+        fprintf(stderr, "A fila ainda não existe !");
+        return -1;
+    }
+
+    if(queue_size((queue_t *)*queue) <= 0){
+        fprintf(stderr, "A fila não pode estar vazia !");
+        return -1;   
+    }
+
+    if(elem == NULL){
+        fprintf(stderr, "O elemento a ser removido não existe !");
+        return -1;
+    }
+
+    // Itera sobre a fila até o final dela ou encontrar o elemento a ser removido
+    task_t *inicial = NULL;
+    task_t *atual = *queue;
+    while(atual != NULL && atual != inicial && atual != elem) {
+        if(inicial == NULL){
+            inicial = atual;
+        }
+        atual = atual->next;
+    }
+
+    // Verifica se chegou até o final da fila sem encontrar o elemento
+    if(atual == inicial){
+        return 0;
+    }
+
+    return 1;   
+}
 /* ============ FUNCOES PRINCIPAIS ============ */
 /*
 * Description: Suspende a tarefa atual por um periodo t em ms
@@ -217,7 +255,7 @@ void task_sleep (int t) {
 *   caso contrário um valor menor que 0
 */
 int task_join (task_t *task) {
-    if(queue_find((queue_t**) &USER_TASKS, (queue_t *) task)){
+    if(task_find(&USER_TASKS, task)){
         // Suspende tarefa
         task_suspend(&(task->tasks_waiting));
 
@@ -237,7 +275,7 @@ int task_join (task_t *task) {
 */
 void timer_interruption_handler (int signum) {
     CURRENT_TIME++;
-    if((!ACTUAL_TASK->system_task) && (--QUANTUM_COUNTER <= 0)) {
+    if((!ACTUAL_TASK->system_task) && (--QUANTUM_COUNTER <= 0) && (LOCK_INTRPT == 0)) {
         QUANTUM_COUNTER = 20;
         task_yield();
     }
@@ -595,17 +633,11 @@ int task_id () {
 
 /* ============ FUNCOES IPC ============ */
 
-void enter_cs (int *lock)
-{
-  // atomic OR (Intel macro for GCC)
-  while (__sync_fetch_and_or (lock, 1)) ;   // busy waiting
-}
- 
-void leave_cs (int *lock)
-{
-  (*lock) = 0 ;
-}
- 
+/*
+* Description: Cria semaforo com valor [value]
+* Args:
+* Return: 0 em caso de sucesso e -1 em caso de erro
+*/
 int sem_create (semaphore_t *s, int value) {
     s->counter = value;
     s->queue = NULL;
@@ -614,15 +646,19 @@ int sem_create (semaphore_t *s, int value) {
     return 0;
 }
 
+/*
+* Description: Realiza down no semaforo
+* Args:
+* Return: 0 em caso de sucesso e -1 em caso de erro
+*/
 int sem_down (semaphore_t *s) {
     if(s == NULL){
         fprintf(stderr, "Semaforo não existe !\n");
         return -1;
     }
 
-    enter_cs(&s->lock);
+    LOCK_INTRPT = 1;
     s->counter--;
-    leave_cs(&s->lock);
     if(s->counter < 0){
         task_suspend(&(s->queue));
         if(s == NULL){ // Se o semaforo foi destruido
@@ -630,26 +666,38 @@ int sem_down (semaphore_t *s) {
         }
     }
 
+    LOCK_INTRPT = 0;
     return 0;
 }
 
+/*
+* Description: Realiza up no semaforo.
+* Args:
+* Return: 0 em caso de sucesso e -1 em caso de erro
+*/
 int sem_up (semaphore_t *s) {
     if(s == NULL) {
         fprintf(stderr, "Semaforo não existe !\n");
         return -1;
     }
-    enter_cs(&s->lock);
+
+    LOCK_INTRPT = 1;
 
     s->counter++;
-    leave_cs(&s->lock);
 
     if(s->counter <= 0) {
         task_resume(s->queue, &s->queue);
     }
 
+    LOCK_INTRPT = 1;
     return 0;
 }
 
+/*
+* Description: Destroi semaforo acordando todas as tarefas que estavam esperando
+* Args:
+* Return: 0 em caso de sucesso e -1 em caso de erro
+*/
 int sem_destroy (semaphore_t *s) {
     awake_tasks(&s->queue);
     if(s->queue != NULL){

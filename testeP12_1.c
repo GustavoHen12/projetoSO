@@ -16,9 +16,9 @@ mqueue_t queueValores, queueRaizes ;
 // corpo da thread produtor
 void prodBody (void * saida)
 {
-   int valor, i = 0 ;
+   int valor ;
 
-   while (i)
+   while (1)
    {
       // sorteia um valor inteiro aleatorio
       valor = random () % 1000 ;
