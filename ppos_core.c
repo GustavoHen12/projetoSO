@@ -2,6 +2,7 @@
 
 #include<stdio.h>
 #include<stdlib.h>
+#include <string.h>
 #include <sys/time.h>
 #include <signal.h>
 #include"ppos.h"
@@ -16,7 +17,9 @@ task_t *USER_TASKS; // Fila de tarefas do usuário
 task_t *SUSPENDED_TASKS; // Fila de tarefas esperando o fim de outra tarefa
 task_t *SLEEPING_TASKS; // Fila de tarefas dormindo
 
-int LAST_ID = 0; // Varável para controle dos ids das tarefas
+int LAST_ID = 0; // Variável para controle dos ids das tarefas
+
+int lock_intrp = 0; // Desabilita preenpcao por tempo
 
 // Status das tarefas
 short READY = 1;
@@ -656,4 +659,111 @@ int sem_destroy (semaphore_t *s) {
     s->counter = 0;
     s = NULL;
     return 0;
+}
+
+/* ============ FUNCOES FILA DE MENSAGENS (MQUEUE_T) ============ */
+
+/*
+* Description: Inicializa a fila de mensagens apontada por queue
+* Args: capacidade para receber até [max_msgs] mensagens de tamanho [msg_size] bytes cada
+* Return: 0 em caso de sucesso e -1 em caso de erro
+*/
+int mqueue_create (mqueue_t *queue, int max_msgs, int msg_size){
+    // Inicia as informações do buffer
+    queue->max_msgs = max_msgs;
+    queue->msg_size = msg_size;
+    queue->quant_msg = 0;
+
+    // Inicia buffer
+    queue->buff = malloc(msg_size * max_msgs);
+    if(!queue->buff){
+        fprintf(stderr, "Não foi possivel inciar o buffer da fila !\n");
+        return -1;
+    }
+    queue->start = 0;
+    queue->end = 0;
+
+    // Cria os semaforos 
+    sem_create(&(queue->s_buffer), 1);
+    sem_create(&(queue->s_cons), 0);
+    sem_create(&(queue->s_prod), max_msgs);
+
+    return 0;
+}
+
+/*
+* Description: Envia a mensagem apontada por msg para o fim da fila queue
+*   esta chamada é bloqueante: caso a fila esteja cheia, a tarefa corrente é suspensa até que o envio possa ser feito.
+* Args: O ponteiro [msg] aponta para um buffer contendo a mensagem a enviar
+* Return: 0 em caso de sucesso e -1 em caso de erro
+*/
+int mqueue_send (mqueue_t *queue, void *msg) {
+    // faz dow nos semaforos
+    if(sem_down(&(queue->s_prod)) < 0) return -1;
+    if(sem_down(&(queue->s_buffer)) < 0) return -1;
+
+    // envia msg para buffer
+    memcpy(((queue->buff)+ (queue->end * queue->msg_size)), msg, queue->msg_size);
+    queue->end++;
+    queue->end %= (queue->max_msgs);
+    queue->quant_msg++;
+
+    // faz up nos semaforos
+    if(sem_up(&(queue->s_buffer)) < 0) return -1;
+    if(sem_up(&(queue->s_cons)) < 0) return -1;
+    return 0;
+}
+
+/*
+* Description: Recebe uma mensagem do início da fila queue e a deposita no buffer apontado por msg
+*   esta chamada é bloqueante: caso a fila esteja vazia, a tarefa corrente é suspensa até que a recepção possa ser feita.
+* Args: O ponteiro [msg] aponta para um buffer que irá receber a mensagem
+* Return: 0 em caso de sucesso e -1 em caso de erro
+*/
+int mqueue_recv (mqueue_t *queue, void *msg) {
+    if(sem_down(&(queue->s_cons)) < 0) return -1; // -1 item para consumir
+    if(sem_down(&(queue->s_buffer)) < 0) return -1; // buffer ocupado
+    
+    // Le mensagem
+    memcpy(msg, (queue->buff) + (queue->start * queue->msg_size), queue->msg_size);
+    queue->start++;
+    queue->start %= (queue->max_msgs);
+    queue->quant_msg--;
+
+    if(sem_up(&(queue->s_buffer)) < 0) return -1; // buffer liberador
+    if(sem_up(&(queue->s_prod)) < 0) return -1; // +1 espaço no buffer liberado para prod
+
+    return 0;
+}
+
+/*
+* Description: Encerra a fila de mensagens indicada por queue, 
+*   destruindo seu conteúdo e liberando todas as tarefas que esperam mensagens dela 
+*   (essas tarefas devem retornar das suas respectivas chamadas com valor de retorno -1).
+* Args: 
+* Return: 0 em caso de sucesso e -1 em caso de erro.
+*/
+int mqueue_destroy (mqueue_t *queue) {
+    if(sem_destroy(&(queue->s_buffer)) < 0) return -1;
+    if(sem_destroy(&(queue->s_cons)) < 0) return -1;
+    if(sem_destroy(&(queue->s_prod)) < 0) return -1;
+
+    free(queue->buff);
+
+    queue->max_msgs = -1;
+    queue->quant_msg = -1;
+    queue->msg_size = -1;
+    return 1;
+}
+
+/*
+* Description: Informa o número de mensagens presentes na fila indicada por queue.
+* Args: 
+* Return: Retorna 0 ou +N em caso de sucesso e -1 em caso de erro.
+*/
+int mqueue_msgs (mqueue_t *queue) {
+    if(queue == NULL){
+        return -1;
+    }
+    return queue->quant_msg;
 }
